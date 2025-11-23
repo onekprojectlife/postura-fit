@@ -62,13 +62,18 @@ export async function middleware(req: NextRequest) {
   const publicRoutes = ['/login', '/landing', '/quiz', '/api']
   const isPublicRoute = publicRoutes.some((route) => req.nextUrl.pathname.startsWith(route))
 
-  // Redirecionar não autenticados para login
+  // Permitir acesso à rota raiz (/) sempre
+  if (req.nextUrl.pathname === '/') {
+    return response
+  }
+
+  // Redirecionar não autenticados tentando acessar rotas protegidas
   if (!session && !isPublicRoute && req.nextUrl.pathname !== '/paywall') {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  // Verificar assinatura para usuários autenticados
-  if (session && !isPublicRoute && req.nextUrl.pathname !== '/paywall') {
+  // Verificar assinatura para usuários autenticados em rotas protegidas (exceto /)
+  if (session && !isPublicRoute && req.nextUrl.pathname !== '/paywall' && req.nextUrl.pathname !== '/') {
     const { data: subscription } = await supabase
       .from('subscriptions')
       .select('status')
@@ -83,19 +88,9 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Redirecionar usuários autenticados que acessam /login
+  // Redirecionar usuários autenticados que acessam /login para a raiz (/)
   if (session && req.nextUrl.pathname === '/login') {
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-
-    if (subscription && subscription.status === 'active') {
-      return NextResponse.redirect(new URL('/', req.url))
-    } else {
-      return NextResponse.redirect(new URL('/paywall', req.url))
-    }
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   return response

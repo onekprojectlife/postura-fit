@@ -31,9 +31,9 @@ export default function LoginPage() {
 
         setMessage('Login realizado com sucesso! Redirecionando...');
         
-        // Aguardar um pouco e recarregar a página para o middleware processar
+        // Redirecionar para o dashboard (página principal do app)
         await new Promise(resolve => setTimeout(resolve, 500));
-        window.location.href = '/';
+        window.location.href = '/dashboard';
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
