@@ -27,7 +27,7 @@ export default function LandingPage() {
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link
-                href="/login"
+                href="/quiz"
                 className="w-full sm:w-auto px-8 py-4 bg-[#FFFFFF] text-[#6BAEDC] rounded-xl font-bold text-lg hover:scale-105 transition-all duration-300 shadow-2xl flex items-center justify-center gap-2 group"
               >
                 Começar Agora
@@ -336,7 +336,7 @@ export default function LandingPage() {
           </p>
           
           <Link
-            href="/login"
+            href="/quiz"
             className="inline-flex items-center gap-3 px-10 py-5 bg-[#FFFFFF] text-[#6BAEDC] rounded-xl font-bold text-xl hover:scale-105 transition-all duration-300 shadow-2xl group"
           >
             Clique Aqui e Baixe Agora!

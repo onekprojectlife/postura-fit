@@ -29,8 +29,11 @@ export default function LoginPage() {
 
         if (error) throw error;
 
-        setMessage('Login realizado com sucesso!');
-        setTimeout(() => router.push('/'), 1500);
+        setMessage('Login realizado com sucesso! Redirecionando...');
+        
+        // Aguardar um pouco e recarregar a página para o middleware processar
+        await new Promise(resolve => setTimeout(resolve, 500));
+        window.location.href = '/';
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -48,7 +51,6 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       setMessage(error.message || 'Ocorreu um erro. Tente novamente.');
-    } finally {
       setLoading(false);
     }
   };

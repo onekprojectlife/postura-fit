@@ -1,75 +1,255 @@
 'use client';
 
-import { useState } from 'react';
-import { Play, Award, TrendingUp, Calendar, Users, Target, CheckCircle2, Clock, Flame } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Play, Award, TrendingUp, Calendar, Users, Target, CheckCircle2, Clock, Flame, LogOut, UserCircle } from 'lucide-react';
 
-// Mock Data
-const exercises = [
-  {
-    id: 1,
-    title: 'Alongamento Cervical',
-    duration: '5 min',
-    difficulty: 'Iniciante',
-    thumbnail: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400&h=300&fit=crop',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    completed: true,
-  },
-  {
-    id: 2,
-    title: 'Postura de Ombros',
-    duration: '8 min',
-    difficulty: 'Intermediário',
-    thumbnail: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=400&h=300&fit=crop',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    completed: false,
-  },
-  {
-    id: 3,
-    title: 'Flexibilidade Lombar',
-    duration: '10 min',
-    difficulty: 'Avançado',
-    thumbnail: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=400&h=300&fit=crop',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    completed: false,
-  },
-  {
-    id: 4,
-    title: 'Mobilidade de Quadril',
-    duration: '7 min',
-    difficulty: 'Intermediário',
-    thumbnail: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=400&h=300&fit=crop',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    completed: true,
-  },
-];
+interface Exercise {
+  id: number;
+  title: string;
+  duration: string;
+  difficulty: string;
+  thumbnail: string;
+  video_url: string;
+}
 
-const badges = [
-  { id: 1, name: 'Primeira Semana', icon: '🎯', unlocked: true },
-  { id: 2, name: '7 Dias Seguidos', icon: '🔥', unlocked: true },
-  { id: 3, name: 'Mestre da Postura', icon: '👑', unlocked: false },
-  { id: 4, name: '30 Dias Consecutivos', icon: '💎', unlocked: false },
-];
+interface UserProgress {
+  exercise_id: number;
+  completed: boolean;
+  completed_at: string | null;
+}
 
-const weeklyProgress = [
-  { day: 'Seg', completed: true, minutes: 15 },
-  { day: 'Ter', completed: true, minutes: 20 },
-  { day: 'Qua', completed: true, minutes: 18 },
-  { day: 'Qui', completed: false, minutes: 0 },
-  { day: 'Sex', completed: false, minutes: 0 },
-  { day: 'Sáb', completed: false, minutes: 0 },
-  { day: 'Dom', completed: false, minutes: 0 },
-];
+interface Badge {
+  id: number;
+  name: string;
+  icon: string;
+  unlocked: boolean;
+}
 
-const communityFeed = [
-  { id: 1, user: 'Ana Silva', action: 'completou 7 dias seguidos!', time: '2h atrás', avatar: '👩' },
-  { id: 2, user: 'Carlos Mendes', action: 'desbloqueou o badge Mestre da Postura', time: '5h atrás', avatar: '👨' },
-  { id: 3, user: 'Maria Santos', action: 'completou Alongamento Cervical', time: '1d atrás', avatar: '👩‍🦰' },
-];
+interface PostureScore {
+  score: number;
+  date: string;
+}
 
 export default function PosturaFit() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'videos' | 'postura' | 'monitor' | 'comunidade'>('dashboard');
   const [selectedVideo, setSelectedVideo] = useState<number | null>(null);
-  const [postureScore, setPostureScore] = useState(78);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [userName, setUserName] = useState('Usuário');
+  const [userAvatar, setUserAvatar] = useState('👤');
+  
+  // Dados reais do usuário
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [userProgress, setUserProgress] = useState<UserProgress[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [postureScore, setPostureScore] = useState(0);
+  const [weeklyProgress, setWeeklyProgress] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    streak: 0,
+    totalMinutes: 0,
+    completedExercises: 0,
+    totalExercises: 0,
+  });
+
+  const router = useRouter();
+
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  const checkUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      setUser(user);
+      await loadUserData(user.id);
+    } catch (error) {
+      console.error('Erro ao verificar usuário:', error);
+      router.push('/login');
+    }
+  };
+
+  const loadUserData = async (userId: string) => {
+    try {
+      // Carregar perfil
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (profile) {
+        setUserName(profile.name || 'Usuário');
+        setUserAvatar(profile.avatar_url || '👤');
+      }
+
+      // Carregar exercícios
+      const { data: exercisesData } = await supabase
+        .from('exercises')
+        .select('*')
+        .order('id');
+
+      if (exercisesData) {
+        setExercises(exercisesData);
+        setStats(prev => ({ ...prev, totalExercises: exercisesData.length }));
+      }
+
+      // Carregar progresso do usuário
+      const { data: progressData } = await supabase
+        .from('user_progress')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (progressData) {
+        setUserProgress(progressData);
+        const completed = progressData.filter(p => p.completed).length;
+        setStats(prev => ({ ...prev, completedExercises: completed }));
+        
+        // Calcular minutos totais
+        const totalMinutes = progressData.reduce((acc, p) => {
+          if (p.completed) {
+            const exercise = exercisesData?.find(e => e.id === p.exercise_id);
+            if (exercise) {
+              const minutes = parseInt(exercise.duration.replace(' min', ''));
+              return acc + minutes;
+            }
+          }
+          return acc;
+        }, 0);
+        setStats(prev => ({ ...prev, totalMinutes }));
+      }
+
+      // Carregar badges
+      const { data: badgesData } = await supabase
+        .from('user_badges')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (badgesData) {
+        const allBadges = [
+          { id: 1, name: 'Primeira Semana', icon: '🎯', unlocked: badgesData.some(b => b.badge_name === 'Primeira Semana') },
+          { id: 2, name: '7 Dias Seguidos', icon: '🔥', unlocked: badgesData.some(b => b.badge_name === '7 Dias Seguidos') },
+          { id: 3, name: 'Mestre da Postura', icon: '👑', unlocked: badgesData.some(b => b.badge_name === 'Mestre da Postura') },
+          { id: 4, name: '30 Dias Consecutivos', icon: '💎', unlocked: badgesData.some(b => b.badge_name === '30 Dias Consecutivos') },
+        ];
+        setBadges(allBadges);
+      }
+
+      // Carregar score de postura
+      const { data: scoreData } = await supabase
+        .from('posture_scores')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (scoreData) {
+        setPostureScore(scoreData.score);
+      }
+
+      // Calcular progresso semanal
+      const today = new Date();
+      const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const weekly = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dayName = weekDays[date.getDay()];
+        
+        const dayProgress = progressData?.filter(p => {
+          if (!p.completed_at) return false;
+          const completedDate = new Date(p.completed_at);
+          return completedDate.toDateString() === date.toDateString();
+        }) || [];
+
+        const minutes = dayProgress.reduce((acc, p) => {
+          const exercise = exercisesData?.find(e => e.id === p.exercise_id);
+          if (exercise) {
+            return acc + parseInt(exercise.duration.replace(' min', ''));
+          }
+          return acc;
+        }, 0);
+
+        weekly.push({
+          day: dayName,
+          completed: minutes > 0,
+          minutes,
+        });
+      }
+      
+      setWeeklyProgress(weekly);
+
+      // Calcular streak
+      let streak = 0;
+      for (let i = weekly.length - 1; i >= 0; i--) {
+        if (weekly[i].completed) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      setStats(prev => ({ ...prev, streak }));
+
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const handleCompleteExercise = async (exerciseId: number) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_progress')
+        .upsert({
+          user_id: user.id,
+          exercise_id: exerciseId,
+          completed: true,
+          completed_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      // Recarregar dados
+      await loadUserData(user.id);
+      setSelectedVideo(null);
+    } catch (error) {
+      console.error('Erro ao marcar exercício:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-[#6BAEDC] rounded-full animate-pulse mx-auto mb-4"></div>
+          <p className="text-[#1E3F66]">Carregando seus dados...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const exercisesWithProgress = exercises.map(ex => ({
+    ...ex,
+    completed: userProgress.some(p => p.exercise_id === ex.id && p.completed),
+  }));
 
   return (
     <div className="min-h-screen bg-[#FFFFFF] text-[#1E3F66]">
@@ -83,16 +263,26 @@ export default function PosturaFit() {
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1E3F66]">Postura Fit</h1>
-                <p className="text-xs text-[#6BAEDC] font-medium">Premium Wellness</p>
+                <p className="text-xs text-[#6BAEDC] font-medium">Olá, {userName}!</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-[#E6E7EB] rounded-lg border border-[#AECBE3]">
-                <Flame className="w-5 h-5 text-[#6BAEDC]" />
-                <span className="text-sm font-semibold text-[#1E3F66]">3 dias</span>
-              </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link
+                href="/profile"
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#E6E7EB] border border-[#AECBE3] text-[#1E3F66] rounded-lg font-medium hover:bg-[#6BAEDC] hover:text-[#FFFFFF] hover:border-[#6BAEDC] transition-all duration-300 text-sm sm:text-base"
+              >
+                <UserCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Perfil</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm sm:text-base"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sair</span>
+              </button>
               <div className="w-10 h-10 bg-gradient-to-br from-[#6BAEDC] to-[#AECBE3] rounded-full flex items-center justify-center text-xl">
-                👤
+                {userAvatar}
               </div>
             </div>
           </div>
@@ -135,9 +325,9 @@ export default function PosturaFit() {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[
-                { label: 'Sequência', value: '3 dias', icon: Flame, color: 'from-[#6BAEDC] to-[#AECBE3]' },
-                { label: 'Total Minutos', value: '127 min', icon: Clock, color: 'from-[#6BAEDC] to-[#AECBE3]' },
-                { label: 'Exercícios', value: '12/20', icon: CheckCircle2, color: 'from-[#6BAEDC] to-[#AECBE3]' },
+                { label: 'Sequência', value: `${stats.streak} dias`, icon: Flame, color: 'from-[#6BAEDC] to-[#AECBE3]' },
+                { label: 'Total Minutos', value: `${stats.totalMinutes} min`, icon: Clock, color: 'from-[#6BAEDC] to-[#AECBE3]' },
+                { label: 'Exercícios', value: `${stats.completedExercises}/${stats.totalExercises}`, icon: CheckCircle2, color: 'from-[#6BAEDC] to-[#AECBE3]' },
                 { label: 'Score Postura', value: `${postureScore}%`, icon: Target, color: 'from-[#6BAEDC] to-[#AECBE3]' },
               ].map((stat, idx) => (
                 <div
@@ -227,7 +417,7 @@ export default function PosturaFit() {
                     <iframe
                       width="100%"
                       height="100%"
-                      src={exercises.find((e) => e.id === selectedVideo)?.videoUrl}
+                      src={exercisesWithProgress.find((e) => e.id === selectedVideo)?.video_url}
                       title="Video player"
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -237,17 +427,20 @@ export default function PosturaFit() {
                   </div>
                   <div className="p-6 sm:p-8">
                     <h3 className="text-2xl sm:text-3xl font-bold mb-4 text-[#1E3F66]">
-                      {exercises.find((e) => e.id === selectedVideo)?.title}
+                      {exercisesWithProgress.find((e) => e.id === selectedVideo)?.title}
                     </h3>
                     <div className="flex flex-wrap gap-3 mb-6">
                       <span className="px-4 py-2 bg-[#6BAEDC]/10 border border-[#6BAEDC] rounded-lg text-[#6BAEDC] text-sm font-medium">
-                        {exercises.find((e) => e.id === selectedVideo)?.duration}
+                        {exercisesWithProgress.find((e) => e.id === selectedVideo)?.duration}
                       </span>
                       <span className="px-4 py-2 bg-[#E6E7EB] border border-[#AECBE3] rounded-lg text-[#1E3F66] text-sm">
-                        {exercises.find((e) => e.id === selectedVideo)?.difficulty}
+                        {exercisesWithProgress.find((e) => e.id === selectedVideo)?.difficulty}
                       </span>
                     </div>
-                    <button className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#6BAEDC] to-[#AECBE3] text-[#FFFFFF] rounded-xl font-bold hover:scale-105 transition-transform duration-300 shadow-lg shadow-[#6BAEDC]/20">
+                    <button 
+                      onClick={() => handleCompleteExercise(selectedVideo)}
+                      className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#6BAEDC] to-[#AECBE3] text-[#FFFFFF] rounded-xl font-bold hover:scale-105 transition-transform duration-300 shadow-lg shadow-[#6BAEDC]/20"
+                    >
                       Marcar como Concluído
                     </button>
                   </div>
@@ -255,7 +448,7 @@ export default function PosturaFit() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {exercises.map((exercise) => (
+                {exercisesWithProgress.map((exercise) => (
                   <div
                     key={exercise.id}
                     onClick={() => setSelectedVideo(exercise.id)}
@@ -316,7 +509,9 @@ export default function PosturaFit() {
                 </div>
                 <div className="text-center">
                   <div className="text-5xl sm:text-6xl font-bold text-[#6BAEDC] mb-2">{postureScore}%</div>
-                  <p className="text-[#1E3F66]/60 text-sm">Excelente!</p>
+                  <p className="text-[#1E3F66]/60 text-sm">
+                    {postureScore >= 80 ? 'Excelente!' : postureScore >= 60 ? 'Bom!' : 'Continue praticando!'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -387,9 +582,9 @@ export default function PosturaFit() {
             {/* Daily Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
               {[
-                { label: 'Hoje', value: '25 min', change: '+5 min', positive: true },
-                { label: 'Esta Semana', value: '127 min', change: '+12 min', positive: true },
-                { label: 'Este Mês', value: '480 min', change: '-8 min', positive: false },
+                { label: 'Hoje', value: `${weeklyProgress[weeklyProgress.length - 1]?.minutes || 0} min`, change: '+5 min', positive: true },
+                { label: 'Esta Semana', value: `${stats.totalMinutes} min`, change: '+12 min', positive: true },
+                { label: 'Este Mês', value: `${stats.totalMinutes} min`, change: '-', positive: true },
               ].map((stat, idx) => (
                 <div
                   key={idx}
@@ -398,7 +593,7 @@ export default function PosturaFit() {
                   <p className="text-[#1E3F66]/60 text-sm mb-2">{stat.label}</p>
                   <p className="text-3xl sm:text-4xl font-bold mb-2 text-[#1E3F66]">{stat.value}</p>
                   <p className={`text-sm ${stat.positive ? 'text-[#6BAEDC]' : 'text-red-400'}`}>
-                    {stat.change} vs semana passada
+                    {stat.change}
                   </p>
                 </div>
               ))}
@@ -408,30 +603,38 @@ export default function PosturaFit() {
             <div className="bg-[#FFFFFF] backdrop-blur-sm border border-[#E6E7EB] rounded-2xl p-6 sm:p-8">
               <h3 className="text-xl sm:text-2xl font-bold mb-6 text-[#1E3F66]">Atividades Recentes</h3>
               <div className="space-y-4">
-                {[
-                  { time: 'Hoje, 14:30', activity: 'Alongamento Cervical', duration: '5 min', completed: true },
-                  { time: 'Hoje, 09:15', activity: 'Mobilidade de Quadril', duration: '7 min', completed: true },
-                  { time: 'Ontem, 18:45', activity: 'Postura de Ombros', duration: '8 min', completed: true },
-                  { time: 'Ontem, 12:00', activity: 'Flexibilidade Lombar', duration: '10 min', completed: true },
-                ].map((log, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-4 bg-[#E6E7EB] rounded-xl border border-[#AECBE3] hover:border-[#6BAEDC] transition-all duration-300"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#6BAEDC]/20 rounded-full flex items-center justify-center">
-                        <CheckCircle2 className="w-5 h-5 text-[#6BAEDC]" />
+                {userProgress
+                  .filter(p => p.completed)
+                  .slice(-4)
+                  .reverse()
+                  .map((log, idx) => {
+                    const exercise = exercises.find(e => e.id === log.exercise_id);
+                    if (!exercise) return null;
+                    
+                    const date = log.completed_at ? new Date(log.completed_at) : new Date();
+                    const timeAgo = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
+                    const timeText = timeAgo < 24 ? `Hoje, ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}` : `${timeAgo < 48 ? 'Ontem' : `${Math.floor(timeAgo / 24)} dias atrás`}`;
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-4 bg-[#E6E7EB] rounded-xl border border-[#AECBE3] hover:border-[#6BAEDC] transition-all duration-300"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-[#6BAEDC]/20 rounded-full flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5 text-[#6BAEDC]" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm sm:text-base text-[#1E3F66]">{exercise.title}</p>
+                            <p className="text-xs sm:text-sm text-[#1E3F66]/60">{timeText}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[#6BAEDC] font-medium text-sm sm:text-base">{exercise.duration}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm sm:text-base text-[#1E3F66]">{log.activity}</p>
-                        <p className="text-xs sm:text-sm text-[#1E3F66]/60">{log.time}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[#6BAEDC] font-medium text-sm sm:text-base">{log.duration}</p>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -460,39 +663,12 @@ export default function PosturaFit() {
               ))}
             </div>
 
-            {/* Community Feed */}
-            <div className="bg-[#FFFFFF] backdrop-blur-sm border border-[#E6E7EB] rounded-2xl p-6 sm:p-8">
-              <h3 className="text-xl sm:text-2xl font-bold mb-6 text-[#1E3F66]">Feed de Atividades</h3>
-              <div className="space-y-4">
-                {communityFeed.map((post) => (
-                  <div
-                    key={post.id}
-                    className="flex items-start gap-4 p-4 bg-[#E6E7EB] rounded-xl border border-[#AECBE3] hover:border-[#6BAEDC] transition-all duration-300"
-                  >
-                    <div className="w-12 h-12 bg-gradient-to-br from-[#6BAEDC] to-[#AECBE3] rounded-full flex items-center justify-center text-2xl flex-shrink-0">
-                      {post.avatar}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm sm:text-base text-[#1E3F66]">
-                        <span className="font-bold">{post.user}</span>{' '}
-                        <span className="text-[#1E3F66]/80">{post.action}</span>
-                      </p>
-                      <p className="text-xs sm:text-sm text-[#1E3F66]/40 mt-1">{post.time}</p>
-                    </div>
-                    <button className="text-[#6BAEDC] hover:text-[#6BAEDC]/80 transition-colors text-xl flex-shrink-0">
-                      👏
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Motivational Quote */}
             <div className="bg-gradient-to-br from-[#6BAEDC]/10 to-[#AECBE3]/10 backdrop-blur-sm border border-[#6BAEDC] rounded-2xl p-6 sm:p-8 text-center">
               <p className="text-xl sm:text-2xl font-bold mb-4 text-[#6BAEDC]">
                 "A postura correta é o primeiro passo para uma vida saudável"
               </p>
-              <p className="text-[#1E3F66]/60 text-sm sm:text-base">Continue assim! Você está no caminho certo. 💪</p>
+              <p className="text-[#1E3F66]/60 text-sm sm:text-base">Continue assim, {userName}! Você está no caminho certo. 💪</p>
             </div>
           </div>
         )}
